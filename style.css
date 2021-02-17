@@ -12,9 +12,27 @@ body {
 div.charts {
 	/* height: 150px; */
 	margin-top: 50px;
+	display: flex;
 }
 
 .axis-label {
 	font-size: 0.8rem;
 	text-anchor: middle;
+}
+
+.grid {
+	stroke: #ccc;
+	stroke-width: 1;
+}
+
+.map-container > path {
+	fill: none;
+	stroke: #ccc;
+	stroke-width: 1;
+}
+
+.bubbles {
+	stroke: #ccc;
+	stroke-width: 1;
+	fill-opacity: 0.8;
 }

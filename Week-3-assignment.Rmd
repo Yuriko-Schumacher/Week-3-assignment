@@ -24,7 +24,11 @@ unique(data.reduced$listedIn)
 data2 <- data.reduced %>% 
   separate(listedIn, c("genre1", 
                        "genre2",
-                       "genre3"), sep = ", ") 
+                       "genre3"), sep = ", ") %>% 
+  separate(country, c("country1",
+                      "country2",
+                      "country3",
+                      "country4"), sep = ", ")
 
 write_csv(data2, "data/netflix_cleaned.csv")
 
