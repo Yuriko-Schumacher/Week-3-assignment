@@ -36,7 +36,6 @@ Promise.all([
 
 function populateGenres() {
 	let dropdown = document.getElementById("genre");
-	console.log(dropdown);
 	let genre1 = netflixData.map((el) => el.genre1);
 	let genre2 = netflixData.map((el) => el.genre2);
 	let genre3 = netflixData.map((el) => el.genre3);
@@ -49,11 +48,6 @@ function populateGenres() {
 		.filter((genre) => genresTv.indexOf(genre) == -1)
 		.filter((genre) => genresMovie.indexOf(genre) == -1)
 		.filter((genre) => genre !== "NA");
-
-	console.log(genres);
-	console.log(genresTv);
-	console.log(genresMovie);
-	console.log(genresOther);
 
 	let options = ["Movie", "TV", "Other"];
 	options.forEach((option) => {
