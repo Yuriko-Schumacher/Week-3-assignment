@@ -29,16 +29,52 @@ Promise.all([
 	console.log(netflixData);
 	console.log(mapData);
 
-	// populate genre dropdown
+	populateGenres();
+	drawBars();
+	drawMap(mapG, mapData, netflixData);
+});
+
+function populateGenres() {
+	let dropdown = document.getElementById("genre");
+	console.log(dropdown);
 	let genre1 = netflixData.map((el) => el.genre1);
 	let genre2 = netflixData.map((el) => el.genre2);
 	let genre3 = netflixData.map((el) => el.genre3);
 	genres = genre1.concat(genre2).concat(genre3);
 	genres = [...new Set(genres)];
 
-	drawBars();
-	drawMap(mapG, mapData, netflixData);
-});
+	let genresTv = genres.filter((el) => el.split(" ").includes("TV"));
+	let genresMovie = genres.filter((el) => el.split(" ").includes("Movies"));
+	let genresOther = genres
+		.filter((genre) => genresTv.indexOf(genre) == -1)
+		.filter((genre) => genresMovie.indexOf(genre) == -1)
+		.filter((genre) => genre !== "NA");
+
+	console.log(genres);
+	console.log(genresTv);
+	console.log(genresMovie);
+	console.log(genresOther);
+
+	let options = ["Movie", "TV", "Other"];
+	options.forEach((option) => {
+		let optGroup = document.createElement("optgroup");
+		optGroup.label = option;
+		optGroup.id = option;
+		dropdown.add(optGroup);
+	});
+
+	let optGroup = document.getElementsByTagName("optgroup");
+
+	addOptions(0, genresMovie);
+	addOptions(1, genresTv);
+	addOptions(2, genresOther);
+
+	function addOptions(optIndex, genres) {
+		genres.forEach((genre) => {
+			optGroup[optIndex].appendChild(new Option(genre, genre));
+		});
+	}
+}
 
 function drawBars(data = netflixData) {
 	data = d3.group(data, (d) => +d.releaseYear);
@@ -156,11 +192,11 @@ function drawMap(mapG, mapData, netflixData) {
 		.interpolator(d3.interpolateRgb("black", "#e30715"));
 
 	let countriesMovie = movieByCountry.map((el) => el[0]);
-	console.log(countriesMovie); // 77 countries
+	// console.log(countriesMovie); // 77 countries
 	let countriesMovieMapData = mapData.features.filter((el) =>
 		countriesMovie.includes(el.properties.brk_name)
 	);
-	console.log(countriesMovieMapData); // 68 countries
+	// console.log(countriesMovieMapData); // 68 countries
 	let long, lat;
 
 	let bubbles = bubblesG
