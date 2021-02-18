@@ -15,8 +15,8 @@ const bubblesG = mapSVG.append("g").classed("bubbles", true);
 
 const dropdown = d3.select("select");
 
-let data, netflixData, mapData;
-let xScale, yScale, colorScale;
+let netflixData, mapData;
+let xScale, yScale, rScale, colorScale;
 let projection, path;
 let xAxis, yAxis, xAxisLabel, yAxisLabel, genres;
 
@@ -31,7 +31,7 @@ Promise.all([
 
 	populateGenres();
 	drawBars();
-	drawMap(mapG, mapData, data);
+	drawMap(mapG, mapData, netflixData);
 });
 
 function populateGenres() {
@@ -39,7 +39,7 @@ function populateGenres() {
 	let genre1 = netflixData.map((el) => el.genre1);
 	let genre2 = netflixData.map((el) => el.genre2);
 	let genre3 = netflixData.map((el) => el.genre3);
-	genres = genre1.concat(genre2, genre3);
+	genres = genre1.concat(genre2).concat(genre3);
 	genres = [...new Set(genres)];
 
 	let genresTv = genres.filter((el) => el.split(" ").includes("TV"));
@@ -49,7 +49,7 @@ function populateGenres() {
 		.filter((genre) => genresMovie.indexOf(genre) == -1)
 		.filter((genre) => genre !== "NA");
 
-	let options = ["Movies", "TV Shows", "Other"];
+	let options = ["Movie", "TV", "Other"];
 	options.forEach((option) => {
 		let optGroup = document.createElement("optgroup");
 		optGroup.label = option;
@@ -153,52 +153,70 @@ function drawVerticalGrid(xValue) {
 		.attr("y2", yearSize.h - yearMargin.b);
 }
 
-function drawMap(mapG, mapData, data) {
+function drawMap(mapG, mapData, netflixData) {
 	projection = d3.geoMercator().fitSize([mapSize.w, mapSize.h], mapData);
 	path = d3.geoPath(projection);
-	let pathSel = mapG
-		.selectAll("path")
+	mapG.selectAll("path")
 		.data(mapData.features)
 		.enter()
 		.append("path")
 		.attr("country", (d) => d.properties.brk_name)
 		.attr("d", (d) => path(d));
 
-	data = netflixData;
+	let dataByType = d3.group(netflixData, (d) => d.type);
+	dataByType = Array.from(dataByType);
 
-	let country1 = d3.group(data, (d) => d.country1);
-	country1 = Array.from(country1);
-	let country2 = d3.group(data, (d) => d.country2);
-	country2 = Array.from(country2);
-	let country3 = d3.group(data, (d) => d.country3);
-	country3 = Array.from(country3);
-	let countries = country1.concat(country2, country3);
+	let tv = dataByType[0][1];
+	let movie = dataByType[1][1];
 
-	let dataForMap = {};
-	dataForMap.country = countries
-		.map((el) => el[0])
-		.filter((el) => el != "NA");
-	dataForMap.country = [...new Set(dataForMap.country)];
-	dataForMap.count = dataForMap.country.map((country, index) => {
-		let thisCountry = countries.filter((el) => el[0] === country);
-		return thisCountry
-			.map((el) => el[1].length)
-			.reduce((sum, el) => {
-				return sum + el;
-			}, 0);
-	});
-	console.log(dataForMap);
+	let movieByCountry = d3.group(movie, (d) => d.country1);
+	movieByCountry = Array.from(movieByCountry);
+
+	let tvByCountry = d3.group(tv, (d) => d.country1);
+	tvByCountry = Array.from(tvByCountry);
+
+	rScale = d3
+		.scaleSqrt()
+		.domain(d3.extent(movieByCountry, (d) => d[1].length))
+		.range([5, 30]);
 
 	colorScale = d3
 		.scaleSequential()
-		.domain(d3.extent(dataForMap.count))
-		.interpolator(d3.interpolateRgb("gray", "#e30715"));
+		.domain(d3.extent(tvByCountry, (d) => d[1].length))
+		.interpolator(d3.interpolateRgb("black", "#e30715"));
 
-	pathSel.style("fill", function (d) {
-		let countryName = d.properties.brk_name;
-		let countryIndex = dataForMap.country.findIndex(
-			(el) => el === countryName
-		);
-		return colorScale(dataForMap.count[countryIndex]);
-	});
+	let countriesMovie = movieByCountry.map((el) => el[0]);
+	// console.log(countriesMovie); // 77 countries
+	let countriesMovieMapData = mapData.features.filter((el) =>
+		countriesMovie.includes(el.properties.brk_name)
+	);
+	// console.log(countriesMovieMapData); // 68 countries
+	let long, lat;
+
+	let bubbles = bubblesG
+		.selectAll("circle")
+		.data(countriesMovieMapData)
+		.join("circle")
+		.classed("bubbles", true)
+		.attr("cx", (d) => {
+			let long = turf.centerOfMass(d).geometry.coordinates[0];
+			return projection([long, lat])[0];
+		})
+		.attr("cy", (d) => {
+			let lat = turf.centerOfMass(d).geometry.coordinates[1];
+			return projection([long, lat])[1];
+		})
+		.attr("r", (d) => {
+			let country = d.properties.brk_name;
+			let dataForThis = movieByCountry.filter((el) => el[0] === country);
+			return rScale(dataForThis[0][1].length);
+		})
+		.attr("fill", (d) => {
+			let country = d.properties.brk_name;
+			let dataForThis = tvByCountry.filter((el) => el[0] === country);
+			if (dataForThis.length > 0) {
+				return colorScale(dataForThis[0][1].length);
+			}
+			return "#ccc";
+		});
 }
