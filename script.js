@@ -13,12 +13,21 @@ mapSVG.attr("width", mapSize.w).attr("height", mapSize.h);
 
 const bubblesG = mapSVG.append("g").classed("bubbles", true);
 
-const dropdown = d3.select("select");
+const dropdown = document.getElementById("genre");
 
-let data, netflixData, mapData;
+let data,
+	netflixData,
+	mapData,
+	filter = [];
 let xScale, yScale, colorScale;
-let projection, path;
-let xAxis, yAxis, xAxisLabel, yAxisLabel, genres;
+let barBrush, projection, path, pathSel;
+let xAxis,
+	yAxis,
+	xAxisLabel,
+	yAxisLabel,
+	shouldMakeVerticalGrid = true,
+	genres,
+	selectedOption;
 
 Promise.all([
 	d3.csv("data/netflix_cleaned.csv"),
@@ -30,12 +39,17 @@ Promise.all([
 	console.log(mapData);
 
 	populateGenres();
+	setupBrush();
 	drawBars();
-	drawMap(mapG, mapData, data);
+	drawMap();
+	colorMap();
+
+	d3.select("#genre").on("change", function () {
+		updateDataByDropdown();
+	});
 });
 
 function populateGenres() {
-	let dropdown = document.getElementById("genre");
 	let genre1 = netflixData.map((el) => el.genre1);
 	let genre2 = netflixData.map((el) => el.genre2);
 	let genre3 = netflixData.map((el) => el.genre3);
@@ -70,6 +84,98 @@ function populateGenres() {
 	}
 }
 
+function setupBrush(data = netflixData) {
+	barBrush = d3
+		.brushY()
+		.extent([
+			[yearMargin.l, yearMargin.t],
+			[yearSize.w - yearMargin.r, yearSize.h - yearMargin.b],
+		])
+		.on("end", function (event) {
+			if (!event.selection) return;
+			let step = yScale.step();
+			let lowerIndex = Math.floor(
+				(event.selection[0] - yearMargin.t) / step
+			);
+			let lowerVal = yScale.domain()[lowerIndex];
+			let upperIndex = Math.floor(
+				(event.selection[1] - yearMargin.t) / step
+			);
+			let upperVal =
+				upperIndex >= yScale.domain().length
+					? yScale.domain()[yScale.domain().length - 1]
+					: yScale.domain()[upperIndex];
+			filter = [lowerVal, upperVal];
+			updateDataByBrush();
+		});
+	yearSVG.call(barBrush);
+}
+
+function updateDataByBrush(filteredData) {
+	let selectedOption = dropdown.value;
+	filteredData = netflixData;
+	if (selectedOption === "all") {
+		filteredData = netflixData;
+		if (filter.length > 0) {
+			filteredData = filteredData.filter((d) => {
+				return (
+					+d.releaseYear >= filter[0] && +d.releaseYear <= filter[1]
+				);
+			});
+		}
+	} else {
+		filteredData = filteredData.filter((d) => {
+			return (
+				d.genre1 === selectedOption ||
+				d.genre2 === selectedOption ||
+				d.genre3 === selectedOption
+			);
+		});
+		if (filter.length > 0) {
+			filteredData = filteredData.filter((d) => {
+				return (
+					+d.releaseYear >= filter[0] && +d.releaseYear <= filter[1]
+				);
+			});
+		}
+	}
+	drawBars(filteredData);
+	colorMap(filteredData);
+}
+
+function updateDataByDropdown(filteredData) {
+	let selectedOption = dropdown.value;
+	console.log(selectedOption);
+	if (filter.length > 0) {
+		filteredData = netflixData.filter((d) => {
+			return +d.releaseYear >= filter[0] && +d.releaseYear <= filter[1];
+		});
+		if (selectedOption !== "all") {
+			filteredData = filteredData.filter((d) => {
+				return (
+					d.genre1 === selectedOption ||
+					d.genre2 === selectedOption ||
+					d.genre3 === selectedOption
+				);
+			});
+		}
+	} else {
+		filteredData = netflixData;
+		if (selectedOption !== "all") {
+			filteredData = filteredData.filter((d) => {
+				return (
+					d.genre1 === selectedOption ||
+					d.genre2 === selectedOption ||
+					d.genre3 === selectedOption
+				);
+			});
+		}
+	}
+	console.log(filteredData);
+	drawBars(filteredData);
+	colorMap(filteredData);
+}
+
 function drawBars(data = netflixData) {
 	data = d3.group(data, (d) => +d.releaseYear);
 	data = Array.from(data);
@@ -79,42 +185,68 @@ function drawBars(data = netflixData) {
 
 	let years = data.map((d) => d[0]);
 
-	xScale = d3
-		.scaleLinear()
-		.domain(d3.extent(data, (d) => d[1].length))
-		.range([yearMargin.l, yearSize.w - yearMargin.r]);
+	if (!xScale) {
+		xScale = d3
+			.scaleLinear()
+			.domain(d3.extent(data, (d) => d[1].length))
+			.range([yearMargin.l, yearSize.w - yearMargin.r]);
+	}
 
-	yScale = d3
-		.scaleBand()
-		.padding(0.3)
-		.domain(years)
-		.range([yearMargin.t, yearSize.h - yearMargin.b]);
+	if (!yScale) {
+		yScale = d3
+			.scaleBand()
+			.padding(0.3)
+			.domain(years)
+			.range([yearMargin.t, yearSize.h - yearMargin.b]);
+	}
 
 	let xValues = [200, 400, 600, 800, 1000];
-	xValues.forEach((value) => drawVerticalGrid(value));
+	if (shouldMakeVerticalGrid) {
+		xValues.forEach((value) => drawVerticalGrid(value));
+		shouldMakeVerticalGrid = false;
+	}
 
-	xAxis = yearG
-		.append("g")
-		.attr("class", "axis")
-		.attr("transform", `translate(0,${yearSize.h - yearMargin.b})`)
-		.call(d3.axisBottom().scale(xScale).ticks(5));
+	if (!xAxis) {
+		xAxis = yearG
+			.append("g")
+			.attr("class", "axis")
+			.attr("transform", `translate(0,${yearSize.h - yearMargin.b})`)
+			.call(d3.axisBottom().scale(xScale).ticks(5));
+	}
 
-	yAxis = yearG
-		.append("g")
-		.attr("class", "axis")
-		.attr("transform", `translate(${yearMargin.l},0)`)
-		.call(
-			d3
-				.axisLeft()
-				.scale(yScale)
-				.tickValues(
-					yScale.domain().filter((d) => {
-						return +d % 5 === 0;
-					})
-				)
-		);
+	if (!yAxis) {
+		yAxis = yearG
+			.append("g")
+			.attr("class", "axis")
+			.attr("transform", `translate(${yearMargin.l},0)`)
+			.call(
+				d3
+					.axisLeft()
+					.scale(yScale)
+					.tickValues(
+						yScale.domain().filter((d) => {
+							return +d % 5 === 0;
+						})
+					)
+			);
+	}
 
-	let circles = yearG
+	// xAxisLabel = yearG
+	// 	.append("text")
+	// 	.attr("class", "axis-label")
+	// 	.attr("x", yearSize.w / 2)
+	// 	.attr("y", yearSize.h)
+	// 	.text("Releases");
+
+	// yAxisLabel = yearG
+	// 	.append("text")
+	// 	.attr("class", "axis-label")
+	// 	.attr("transform", "rotate(-90)")
+	// 	.attr("x", -yearSize.h / 2)
+	// 	.attr("y", yearMargin.l / 3)
+	// 	.text("Year");
+
+	let bars = yearG
 		.selectAll("rect")
 		.data(data)
 		.join("rect")
@@ -126,21 +258,6 @@ function drawBars(data = netflixData) {
 		.attr("fill-opacity", ".8")
 		.attr("stroke", "#e30715")
 		.attr("stroke-width", ".4");
-
-	xAxisLabel = yearG
-		.append("text")
-		.attr("class", "axis-label")
-		.attr("x", yearSize.w / 2)
-		.attr("y", yearSize.h)
-		.text("Releases");
-
-	yAxisLabel = yearG
-		.append("text")
-		.attr("class", "axis-label")
-		.attr("transform", "rotate(-90)")
-		.attr("x", -yearSize.h / 2)
-		.attr("y", yearMargin.l / 3)
-		.text("Year");
 }
 
 function drawVerticalGrid(xValue) {
@@ -153,19 +270,19 @@ function drawVerticalGrid(xValue) {
 		.attr("y2", yearSize.h - yearMargin.b);
 }
 
-function drawMap(mapG, mapData, data) {
+function drawMap() {
 	projection = d3.geoMercator().fitSize([mapSize.w, mapSize.h], mapData);
 	path = d3.geoPath(projection);
-	let pathSel = mapG
+	pathSel = mapG
 		.selectAll("path")
 		.data(mapData.features)
 		.enter()
 		.append("path")
 		.attr("country", (d) => d.properties.brk_name)
 		.attr("d", (d) => path(d));
+}
 
-	data = netflixData;
-
+function colorMap(data = netflixData) {
 	let country1 = d3.group(data, (d) => d.country1);
 	country1 = Array.from(country1);
 	let country2 = d3.group(data, (d) => d.country2);
@@ -179,7 +296,7 @@ function drawMap(mapG, mapData, data) {
 		.map((el) => el[0])
 		.filter((el) => el != "NA");
 	dataForMap.country = [...new Set(dataForMap.country)];
-	dataForMap.count = dataForMap.country.map((country, index) => {
+	dataForMap.count = dataForMap.country.map((country) => {
 		let thisCountry = countries.filter((el) => el[0] === country);
 		return thisCountry
 			.map((el) => el[1].length)
@@ -187,12 +304,13 @@ function drawMap(mapG, mapData, data) {
 				return sum + el;
 			}, 0);
 	});
-	console.log(dataForMap);
 
 	colorScale = d3
 		.scaleSequential()
 		.domain(d3.extent(dataForMap.count))
 		.interpolator(d3.interpolateRgb("gray", "#e30715"));
+
+	console.log(dataForMap);
 
 	pathSel.style("fill", function (d) {
 		let countryName = d.properties.brk_name;
